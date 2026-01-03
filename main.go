@@ -207,6 +207,15 @@ func problemsByTagsOnlyHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// tagsHandler is a handler to get all supported tags
+func tagsHandler(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(CodeForcesTags); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // <--------------------------------- server code --------------------------------->
 
 func main() {
@@ -219,6 +228,7 @@ func main() {
 	mux.HandleFunc("/problems/multi", problemsByTagsHandler)
 	mux.HandleFunc("/problems/only", problemsByTagOnlyHandler)
 	mux.HandleFunc("/problems/multi/only", problemsByTagsOnlyHandler)
+	mux.HandleFunc("/tags", tagsHandler)
 
 	server := &http.Server{
 		Addr:              ":" + PORT,
