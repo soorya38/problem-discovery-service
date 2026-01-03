@@ -21,6 +21,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -60,10 +61,14 @@ type CodeforcesResponse struct {
 	} `json:"result"`
 }
 
-// fetchCodeforcesProblemSetWithTag fetches a list of problems based on the provided tag
-// this method returns all the problems with the provided tag with other tags too
-func fetchCodeforcesProblemSetWithTag(tag string) ([]Problem, error) {
-	url := CODEFORCES_BASE_URL + PROBLEMSET_METHOD + "?tags=" + tag
+var cache sync.Map
+
+func fetchProblems(tagsParam string) ([]Problem, error) {
+	if val, ok := cache.Load(tagsParam); ok {
+		return val.([]Problem), nil
+	}
+
+	url := CODEFORCES_BASE_URL + PROBLEMSET_METHOD + "?tags=" + tagsParam
 	response, err := http.Get(url)
 	if err != nil {
 		log.Printf("Error fetching problem set, err=%v", err)
@@ -78,8 +83,7 @@ func fetchCodeforcesProblemSetWithTag(tag string) ([]Problem, error) {
 	}
 
 	var codeforcesResponse CodeforcesResponse
-	err = json.Unmarshal(body, &codeforcesResponse)
-	if err != nil {
+	if err := json.Unmarshal(body, &codeforcesResponse); err != nil {
 		log.Printf("Error unmarshalling problem set, err=%v", err)
 		return nil, err
 	}
@@ -89,7 +93,14 @@ func fetchCodeforcesProblemSetWithTag(tag string) ([]Problem, error) {
 		return codeforcesResponse.Result.Problems[i].Rating < codeforcesResponse.Result.Problems[j].Rating
 	})
 
+	cache.Store(tagsParam, codeforcesResponse.Result.Problems)
 	return codeforcesResponse.Result.Problems, nil
+}
+
+// fetchCodeforcesProblemSetWithTag fetches a list of problems based on the provided tag
+// this method returns all the problems with the provided tag with other tags too
+func fetchCodeforcesProblemSetWithTag(tag string) ([]Problem, error) {
+	return fetchProblems(tag)
 }
 
 // fetchCodeforcesProblemSetWithTagOnly fetches a list of problems based on the provided tag
@@ -113,33 +124,7 @@ func fetchCodeforcesProblemSetWithTagOnly(tag string) ([]Problem, error) {
 // fetchCodeforcesProblemSetWithTags fetches a list of problems based on the provided tags
 // this method returns problems with all the provided tags
 func fetchCodeforcesProblemSetWithTags(tags []string) ([]Problem, error) {
-	url := CODEFORCES_BASE_URL + PROBLEMSET_METHOD + "?tags=" + strings.Join(tags, ";")
-	response, err := http.Get(url)
-	if err != nil {
-		log.Printf("Error fetching problem set, err=%v", err)
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		log.Printf("Error reading problem set, err=%v", err)
-		return nil, err
-	}
-
-	var codeforcesResponse CodeforcesResponse
-	err = json.Unmarshal(body, &codeforcesResponse)
-	if err != nil {
-		log.Printf("Error unmarshalling problem set, err=%v", err)
-		return nil, err
-	}
-
-	// sort the problems by rating
-	sort.Slice(codeforcesResponse.Result.Problems, func(i, j int) bool {
-		return codeforcesResponse.Result.Problems[i].Rating < codeforcesResponse.Result.Problems[j].Rating
-	})
-
-	return codeforcesResponse.Result.Problems, nil
+	return fetchProblems(strings.Join(tags, ";"))
 }
 
 // fetchCodeforcesProblemSetWithTagsOnly fetches a list of problems based on the provided tags
